@@ -5,93 +5,95 @@ import { AirfieldCanvas, type Asset, type Moving, type Sensor } from '../compone
 const disclaimer = 'This MVP uses simulated data for demonstration and feasibility purposes only. It does not represent certified safety analysis, operational control output, regulatory approval, or real hydrogen deployment.';
 
 const defaultAssets: Asset[] = [
-  { id:'runway',label:'Runway',kind:'runway',x:40,y:70,w:290,h:30,color:'#334155' },
-  { id:'taxi',label:'Taxiway',kind:'taxiway',x:220,y:120,w:350,h:18,color:'#475569',draggable:false },
-  { id:'hangar',label:'Hangar',kind:'hangar',x:620,y:340,w:130,h:70,color:'#0f766e' },
-  { id:'ops',label:'Operations',kind:'ops',x:780,y:360,w:120,h:65,color:'#155e75' },
-  { id:'stand',label:'Aircraft Stand',kind:'stand',x:540,y:270,w:95,h:65,color:'#4f46e5' },
-  { id:'tank',label:'H₂ Tank',kind:'tank',x:700,y:180,w:55,h:55,color:'#0891b2' },
-  { id:'refueller',label:'Refuelling Unit',kind:'refueller',x:640,y:250,w:70,h:42,color:'#0ea5e9' },
-  { id:'parking',label:'Support Parking',kind:'parking',x:450,y:420,w:130,h:70,color:'#166534' }
+  { id:'runway',label:'Runway',kind:'runway',x:30,y:105,w:280,h:32,color:'#334155' },
+  { id:'taxi',label:'Taxiway',kind:'taxiway',x:320,y:165,w:280,h:18,color:'#475569' },
+  { id:'stand',label:'Aircraft Stand',kind:'stand',x:570,y:220,w:110,h:70,color:'#4f46e5' },
+  { id:'hangar',label:'Hangar',kind:'hangar',x:750,y:360,w:140,h:80,color:'#0f766e' },
+  { id:'ops',label:'Operations Building',kind:'ops',x:760,y:260,w:145,h:70,color:'#155e75' },
+  { id:'generator',label:'Hydrogen Generator',kind:'generator',x:630,y:90,w:120,h:65,color:'#0ea5e9' },
+  { id:'tank',label:'Hydrogen Storage Tank',kind:'tank',x:790,y:120,w:70,h:70,color:'#0284c7' },
+  { id:'refueller',label:'Hydrogen Refuelling Station',kind:'refueller',x:650,y:285,w:135,h:55,color:'#38bdf8' },
+  { id:'parking',label:'Support Vehicle Parking',kind:'parking',x:480,y:430,w:155,h:70,color:'#166534' },
+  { id:'serviceRoad',label:'Service Road',kind:'serviceRoad',x:470,y:395,w:220,h:20,color:'#64748b',draggable:false }
 ];
-const defaultSensors: Sensor[] = Array.from({length:6}).map((_,i)=>({id:['H1','T2','P3','PR4','W5','M6'][i], type:['hydrogen','thermal','proximity','pressure','weather','multi'][i] as Sensor['type'], x:160+i*140,y:440-(i%2)*140,radius:80,value:0,unit:['ppm','°C','events','bar','m/s','mix'][i],status:'normal'}));
+const defaultSensors: Sensor[] = [
+  { id:'H1', type:'hydrogen', x:830, y:210, radius:90, value:0, unit:'ppm', status:'normal' },
+  { id:'T2', type:'thermal', x:620, y:360, radius:90, value:0, unit:'°C', status:'normal' },
+  { id:'P3', type:'proximity', x:520, y:280, radius:95, value:0, unit:'events', status:'normal' },
+  { id:'PR4', type:'pressure', x:780, y:210, radius:70, value:0, unit:'bar', status:'normal' },
+  { id:'W5', type:'weather', x:920, y:65, radius:60, value:0, unit:'m/s', status:'normal' },
+  { id:'M6', type:'multi', x:700, y:350, radius:90, value:0, unit:'index', status:'normal' }
+];
 
 export function SimulatorPage(){
   const [assets,setAssets]=useState(defaultAssets); const [sensors,setSensors]=useState(defaultSensors);
-  const [minute,setMinute]=useState(0); const [playing,setPlaying]=useState(false); const [speed,setSpeed]=useState(1);
-  const [controls,setControls]=useState({flightsPerHour:8,duration:180,arrivalInterval:8,turnaround:22,taxiSpeed:14,tankSize:1200,leak:8,windDir:120,windSpeed:12,traffic:6,vehicleActivity:6});
-  const [saved,setSaved]=useState<Record<string,unknown>>({});
-  const [layers,setLayers]=useState({hydrogen:true,thermal:true,movement:true,risk:true,coverage:true,safety:true});
+  const [minute,setMinute]=useState(0); const [playing,setPlaying]=useState(false); const [speed,setSpeed]=useState(1); const [selectedId,setSelectedId]=useState<string>('runway');
+  const [controls,setControls]=useState({flightsPerHour:8,duration:180,arrivalInterval:8,turnaround:22,taxiSpeed:14,vehicleCount:8,vehicleSpeed:13,fuelThreshold:25,vehicleConsumption:2.4,serviceDuration:14,refuelDuration:10,generatorCapacity:1500,productionRate:62,generatorSpeed:78,tankCapacity:1200,tankStart:900,stationSpeed:9,bays:2,leak:8,windDir:120,windSpeed:12,traffic:6,safetyRadius:110});
+  const [layers,setLayers]=useState({hydrogen:true,thermal:true,movement:true,risk:true,coverage:true,safety:true,routes:true,labels:true});
 
-  useEffect(()=>{if(!playing)return; const id=setInterval(()=>setMinute((m)=>Math.min(controls.duration,m+1)),800/speed); return()=>clearInterval(id);},[playing,speed,controls.duration]);
+  useEffect(()=>{if(!playing)return; const id=setInterval(()=>setMinute((m)=>Math.min(controls.duration,m+1)),850/speed); return()=>clearInterval(id);},[playing,speed,controls.duration]);
 
-  const aircraft = useMemo(()=>{
-    const count=Math.max(1,Math.floor((controls.flightsPerHour*controls.duration)/60));
-    return Array.from({length:count}).map((_,i)=>{const start=i*controls.arrivalInterval; const t=minute-start; const stand=assets.find(a=>a.id==='stand')!; const runway=assets.find(a=>a.id==='runway')!;
-      let x=20,y=80,status='Scheduled';
-      if(t>0&&t<12){x=20+t*22;y=80+t*10;status='Arriving';}
-      else if(t>=12&&t<24){x=280+(t-12)*20;y=200+(t-12)*4;status='Taxiing';}
-      else if(t>=24&&t<24+controls.turnaround){x=stand.x+35;y=stand.y+24;status=t<32?'On stand':'Turnaround';}
-      else if(t>=24+controls.turnaround&&t<42+controls.turnaround){x=stand.x-(t-(24+controls.turnaround))*18;y=stand.y-(t-(24+controls.turnaround))*8;status='Departing';}
-      else if(t>=42+controls.turnaround){x=runway.x+runway.w-20;y=runway.y+12;status='Departed';}
-      return {id:`A${i+1}`,kind:'aircraft' as const,x,y,status,color:'#e2e8f0',route:[]};
+  const aircraft = useMemo(()=>Array.from({length:Math.max(1,Math.floor((controls.flightsPerHour*controls.duration)/60))}).map((_,i)=>{const start=i*controls.arrivalInterval; const t=minute-start; const stand=assets.find(a=>a.id==='stand')!; const runway=assets.find(a=>a.id==='runway')!; let x=20,y=90,status='Scheduled';
+    if(t>0&&t<12){x=20+t*23;y=90+t*9;status='Approaching';}
+    else if(t>=12&&t<24){x=runway.x+40+(t-12)*18;y=runway.y+8;status='Landing';}
+    else if(t>=24&&t<32){x=300+(t-24)*30;y=165+(t-24)*7;status='Taxiing to stand';}
+    else if(t>=32&&t<32+controls.turnaround){x=stand.x+40;y=stand.y+30;status=t<40?'On stand':'Turnaround';}
+    else if(t>=32+controls.turnaround&&t<50+controls.turnaround){x=stand.x-(t-(32+controls.turnaround))*16;y=stand.y-(t-(32+controls.turnaround))*8;status='Taxiing to runway';}
+    else if(t>=50+controls.turnaround&&t<58+controls.turnaround){x=runway.x+120+(t-(50+controls.turnaround))*22;y=runway.y+8;status='Taking off';}
+    else if(t>=58+controls.turnaround){x=980;y=60;status='Departed';}
+    return {id:`A${i+1}`,kind:'aircraft' as const,x,y,status,color:'#a855f7',route:[]};
+  }),[minute,controls,assets]);
+
+  const vehicles = useMemo(()=>{const stand=assets.find(a=>a.id==='stand')!; const park=assets.find(a=>a.id==='parking')!; const ref=assets.find(a=>a.id==='refueller')!; const active=aircraft.filter(a=>a.status==='On stand'||a.status==='Turnaround').length;
+    return Array.from({length:controls.vehicleCount}).map((_,i)=>{const phase=(minute+i*4)%40; const fuel=100-((minute*(controls.vehicleConsumption/5)+(i*2))%100); const lowFuel=fuel<controls.fuelThreshold; const supporting=active>0 && phase<20 && !lowFuel;
+      const refuelRun=lowFuel || phase>=32; let x=park.x+15+(i%5)*24; let y=park.y+20+Math.floor(i/5)*20; let status='Waiting at support parking'; let task='Idle';
+      if(supporting){x=park.x+20+phase*4.8;y=park.y+20-phase*2.3;status='Moving to aircraft';task='Dispatched to aircraft';}
+      else if(phase>=20&&phase<30&&!lowFuel){x=stand.x+20+((phase-20)*2);y=stand.y+18;status='Servicing aircraft';task='Service';}
+      else if(phase>=30&&!refuelRun){x=stand.x+30-(phase-30)*6;y=stand.y+20+(phase-30)*5;status='Returning to support parking';task='Return';}
+      else if(refuelRun){x=ref.x+10+((i%3)*16);y=ref.y+15;status='Refuelling';task='Refuel';}
+      return {id:`V${i+1}`,kind:'vehicle' as const,x,y,status,color:'#fb923c',route:[],vehicleType:['Refuel','Tug','Maintenance','Inspection','Emergency'][i%5],fuel:Math.max(5,Number(fuel.toFixed(1))),task};
     });
-  },[minute,controls,assets]);
-
-  const vehicles = useMemo(()=>{const stand=assets.find(a=>a.id==='stand')!; const park=assets.find(a=>a.id==='parking')!;
-    const activeAircraft=aircraft.filter(a=>a.status==='On stand'||a.status==='Turnaround').length;
-    const types=['Refuel','Tug','Maint','Inspect','Emergency'];
-    return Array.from({length:Math.max(1,activeAircraft*Math.max(1,Math.round(controls.vehicleActivity/3)))}).map((_,i)=>{const phase=(minute+i*3)%30; const toStand=phase<15; return {id:`V${i+1}`,kind:'vehicle' as const, x:toStand?park.x+20+(phase*8):stand.x+20+((phase-15)*-8),y:toStand?park.y+22+(phase*2):stand.y+14+((phase-15)*4),status:toStand?'Moving to aircraft':'Returning',color:'#f59e0b',route:[], vehicleType:types[i%types.length],assignedAircraft: aircraft.find(a=>a.status==='On stand')?.id ?? 'N/A'};});
-  },[aircraft,assets,minute,controls.vehicleActivity]);
+  },[aircraft,assets,minute,controls]);
 
   const movings: Moving[] = [...aircraft,...vehicles];
-  const highestHydrogen=Math.max(...sensors.map(s=>s.type==='hydrogen'||s.type==='multi'?s.value:0));
-  const highestThermal=Math.max(...sensors.map(s=>s.type==='thermal'||s.type==='multi'?s.value:0));
-  const demand=(controls.flightsPerHour*18)+(vehicles.length*2.8)+(controls.leak*1.2)+(controls.traffic*10);
-  const remaining=Math.max(0,100-((demand*minute/60)/controls.tankSize)*100);
-  const pressure=Math.max(15,320-((100-remaining)*2.2));
-  const risk=Math.min(100, Math.round((controls.leak*4)+(vehicles.length*1.7)+(highestHydrogen/12)+(highestThermal/2.5)+(100-remaining)/4));
+  const demand = vehicles.reduce((a,v)=>a+(100-(v as any).fuel)*0.08,0)+(controls.flightsPerHour*7);
+  const produced = minute*(controls.productionRate*(controls.generatorSpeed/100))/60;
+  const consumed = minute*(demand/60);
+  const tankLevel = Math.max(0, Math.min(controls.tankCapacity, controls.tankStart + produced - consumed - (controls.leak*minute*0.12)));
+  const pressure = 40 + (tankLevel/controls.tankCapacity)*260;
 
-  useEffect(()=>{
-    setSensors((prev)=>prev.map((s)=>{const tank=assets.find(a=>a.id==='tank')!; const dist=Math.hypot(s.x-tank.x,s.y-tank.y); const vehicleHeat=vehicles.reduce((acc,v)=>acc+Math.max(0,70-Math.hypot(s.x-v.x,s.y-v.y))/10,0);
-      const prox=[...vehicles,...aircraft].filter(v=>Math.hypot(s.x-v.x,s.y-v.y)<s.radius).length;
-      const hydrogen=Math.max(0, (controls.leak*22)+(controls.windSpeed*1.4)-dist/8 + (controls.windDir>90&&controls.windDir<210?18:0));
-      const thermal=23+vehicleHeat+ (aircraft.filter(a=>a.status==='Turnaround').length*1.8);
-      const value = s.type==='hydrogen'?hydrogen:s.type==='thermal'?thermal:s.type==='proximity'?prox:s.type==='pressure'?pressure:s.type==='weather'?controls.windSpeed:(hydrogen+thermal+prox)/3;
-      const status=value>(s.type==='proximity'?6:s.type==='pressure'?80:90)?'critical':value>(s.type==='proximity'?3:s.type==='pressure'?130:55)?'warning':'normal';
-      return {...s,value:Number(value.toFixed(1)),status};
-    }));
-  },[minute,assets,vehicles,aircraft,controls,pressure]);
+  useEffect(()=>{setSensors(prev=>prev.map(s=>{const tank=assets.find(a=>a.id==='tank')!; const dist=Math.hypot(s.x-(tank.x+tank.w/2),s.y-(tank.y+tank.h/2)); const trafficHeat=vehicles.reduce((acc,v)=>acc+Math.max(0,95-Math.hypot(s.x-v.x,s.y-v.y))/11,0);
+    const prox=[...vehicles,...aircraft].filter(v=>Math.hypot(s.x-v.x,s.y-v.y)<s.radius).length; const downwind = controls.windDir>80&&controls.windDir<220?1.25:0.8;
+    const hydrogen=Math.max(0,(controls.leak*15*downwind)+(controls.windSpeed*1.1)-dist/9); const thermal=22+trafficHeat+(aircraft.filter(a=>a.status==='Turnaround').length*1.3);
+    const value=s.type==='hydrogen'?hydrogen:s.type==='thermal'?thermal:s.type==='proximity'?prox:s.type==='pressure'?pressure:s.type==='weather'?controls.windSpeed:(hydrogen+thermal+prox)/3;
+    const status=value>(s.type==='proximity'?8:s.type==='pressure'?280:88)?'critical':value>(s.type==='proximity'?4:s.type==='pressure'?160:55)?'warning':'normal';
+    return {...s,value:Number(value.toFixed(1)),status};
+  }));},[minute,assets,vehicles,aircraft,controls,pressure]);
 
-  const alerts = useMemo(()=>{
-    const a:string[]=[]; if(highestHydrogen>80)a.push('Hydrogen critical threshold exceeded.'); else if(highestHydrogen>55)a.push('Hydrogen warning threshold exceeded.');
-    if(highestThermal>70)a.push('Thermal anomaly detected near aircraft stand.');
-    if(vehicles.some(v=>v.x>610&&v.x<830&&v.y>140&&v.y<320))a.push('Vehicle entered restricted safety zone.');
-    if(remaining<30)a.push('High demand reducing tank capacity.'); if(pressure<90)a.push('Tank pressure warning threshold reached.');
-    return a;
-  },[highestHydrogen,highestThermal,vehicles,remaining,pressure]);
+  const alerts = useMemo(()=>{const a:string[]=[]; if(tankLevel<controls.tankCapacity*0.2)a.push('Tank level low.'); if(controls.productionRate*(controls.generatorSpeed/100)<demand)a.push('Generator production cannot meet demand.'); if(vehicles.filter(v=>v.status==='Refuelling').length>controls.bays)a.push('Refuelling queue increasing.'); if(sensors.some(s=>s.type==='hydrogen'&&s.status!=='normal'))a.push('Hydrogen plume threshold triggered.'); return a;},[tankLevel,controls,demand,sensors,vehicles]);
 
-  const trend = Array.from({length:12}).map((_,i)=>({t:i*15,demand:Math.round(demand*(0.5+i/14)),pressure:Math.round(320-(i*17)-(controls.leak*2))}));
+  const selected = [...assets,...sensors,...movings].find((x:any)=>x.id===selectedId);
   const moveAsset=(id:string,x:number,y:number)=>setAssets((a)=>a.map(it=>it.id===id?{...it,x,y}:it));
   const moveSensor=(id:string,x:number,y:number)=>setSensors((s)=>s.map(it=>it.id===id?{...it,x,y}:it));
-
-  const explanation = `Minute ${minute}: ${aircraft.filter(a=>a.status==='On stand'||a.status==='Turnaround').length} aircraft are on stand and ${vehicles.length} hydrogen-powered vehicles are active. Demand is ${demand.toFixed(1)} kg-equivalent and risk is ${risk}/100. Downwind sensors are elevated under leak severity ${controls.leak}.`;
 
   return <div className='space-y-3'>
     <div className='rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200'>{disclaimer}</div>
     <div className='grid grid-cols-12 gap-3'>
-      <aside className='col-span-12 lg:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2 text-xs'>{Object.entries({flightsPerHour:'Flights/hr',duration:'Duration',arrivalInterval:'Arrival int',turnaround:'Turnaround',taxiSpeed:'Taxi speed',tankSize:'Tank size',leak:'Leak severity',windDir:'Wind dir',windSpeed:'Wind speed',traffic:'Traffic',vehicleActivity:'Vehicle act'}).map(([k,l])=><label key={k} className='block'><span className='text-slate-400'>{l}</span><input type='range' min={k==='windDir'?0:1} max={k==='tankSize'?3000:k==='duration'?360:k==='windDir'?360:k==='flightsPerHour'?30:20} value={(controls as any)[k]} onChange={e=>setControls(c=>({...c,[k]:Number(e.target.value)}))} className='w-full'/><span>{(controls as any)[k]}</span></label>)}
-      <div className='grid grid-cols-2 gap-1'>{Object.keys(layers).map((k)=><button key={k} onClick={()=>setLayers((s:any)=>({...s,[k]:!s[k]}))} className='rounded bg-slate-800 px-2 py-1'>{k}</button>)}</div>
-      <button className='rounded bg-emerald-600 py-1' onClick={()=>setPlaying(true)}>Run</button><label className='block'>Speed<input type='range' min={1} max={5} value={speed} onChange={e=>setSpeed(Number(e.target.value))} className='w-full'/>{speed}x</label><button className='rounded bg-slate-700 py-1' onClick={()=>setPlaying(false)}>Pause</button><button className='rounded bg-slate-700 py-1' onClick={()=>setMinute((m)=>Math.min(controls.duration,m+1))}>Step</button><button className='rounded bg-slate-700 py-1' onClick={()=>{setMinute(0);setAssets(defaultAssets);setSensors(defaultSensors);}}>Reset</button>
-      <button className='rounded bg-indigo-700 py-1' onClick={()=>setSaved((s)=>({...s,A:{assets,sensors,controls}}))}>Save A</button><button className='rounded bg-indigo-700 py-1' onClick={()=>setSaved((s)=>({...s,B:{assets,sensors,controls}}))}>Save B</button><button className='rounded bg-indigo-700 py-1' onClick={()=>setSaved((s)=>({...s,C:{assets,sensors,controls}}))}>Save C</button>
+      <aside className='col-span-12 lg:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2 text-xs overflow-y-auto max-h-[560px]'>
+        {Object.entries({flightsPerHour:'Flights/hr',arrivalInterval:'Arrival interval',turnaround:'Turnaround',vehicleCount:'Vehicles',vehicleSpeed:'Vehicle speed',fuelThreshold:'Fuel threshold',generatorCapacity:'Generator cap',productionRate:'Production rate',generatorSpeed:'Generator speed',tankCapacity:'Tank cap',stationSpeed:'Refuel speed',bays:'Bays',leak:'Leak',windDir:'Wind dir',windSpeed:'Wind speed',traffic:'Traffic'}).map(([k,l])=><label key={k} className='block'><span className='text-slate-400'>{l}</span><input type='range' min={1} max={k.includes('Capacity')?3000:k==='windDir'?360:k==='vehicleCount'?20:120} value={(controls as any)[k]} onChange={e=>setControls(c=>({...c,[k]:Number(e.target.value)}))} className='w-full'/><span>{(controls as any)[k]}</span></label>)}
+        <div className='grid grid-cols-2 gap-1'>{Object.keys(layers).map((k)=><button key={k} onClick={()=>setLayers((s:any)=>({...s,[k]:!s[k]}))} className='rounded bg-slate-800 px-2 py-1'>{k}</button>)}</div>
+        <div className='flex gap-1 flex-wrap'><button className='rounded bg-emerald-600 px-2 py-1' onClick={()=>setPlaying(true)}>Play</button><button className='rounded bg-slate-700 px-2 py-1' onClick={()=>setPlaying(false)}>Pause</button><button className='rounded bg-slate-700 px-2 py-1' onClick={()=>setMinute((m)=>Math.min(controls.duration,m+1))}>Step</button><button className='rounded bg-slate-700 px-2 py-1' onClick={()=>{setMinute(0);setAssets(defaultAssets);setSensors(defaultSensors);}}>Reset</button></div>
       </aside>
-      <main className='col-span-12 lg:col-span-7'><AirfieldCanvas assets={assets} sensors={sensors} movings={movings} heatToggle={layers} onMoveAsset={moveAsset} onMoveSensor={moveSensor} /></main>
-      <aside className='col-span-12 lg:col-span-3 bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2 text-xs'><h3 className='font-semibold'>Sensor readings & alerts</h3>{sensors.map(s=><div key={s.id} className='rounded bg-slate-800 p-2'>{s.id} {s.type}: <b>{s.value} {s.unit}</b> <span className={s.status==='critical'?'text-red-400':s.status==='warning'?'text-amber-400':'text-emerald-400'}>{s.status}</span></div>)}<h4 className='font-semibold pt-2'>Alerts</h4>{alerts.length?alerts.map((a,i)=><div key={i} className='text-amber-300'>• {a}</div>):<div className='text-emerald-400'>No active alerts</div>}<div className='rounded border border-slate-600 p-2 text-slate-200'>{explanation}</div></aside>
+      <main className='col-span-12 lg:col-span-7'>
+        <AirfieldCanvas assets={assets} sensors={sensors} movings={movings} heatToggle={layers} onMoveAsset={moveAsset} onMoveSensor={moveSensor} onSelect={setSelectedId} selectedId={selectedId} />
+        <div className='mt-2 rounded bg-slate-900 border border-slate-700 p-2 text-xs text-slate-200'>Legend: <span className='text-purple-400'>Aircraft</span> · <span className='text-orange-300'>Support vehicle</span> · <span className='text-sky-300'>Hydrogen assets</span> · <span className='text-cyan-300'>Sensors</span> · <span className='text-red-300'>Safety zone</span></div>
+      </main>
+      <aside className='col-span-12 lg:col-span-3 bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2 text-xs'><h3 className='font-semibold'>Object details</h3><div className='rounded bg-slate-800 p-2'>{selected?Object.entries(selected as any).slice(0,9).map(([k,v])=><div key={k}><span className='text-slate-400'>{k}</span>: {String(v)}</div>):'Select an object'}</div><h4 className='font-semibold pt-2'>Alerts</h4>{alerts.length?alerts.map((a,i)=><div key={i} className='text-amber-300'>• {a}</div>):<div className='text-emerald-400'>No active alerts</div>}<div className='rounded border border-slate-600 p-2 text-slate-200'>Minute {minute}: {aircraft.filter(a=>a.status.includes('stand')||a.status==='Turnaround').length} aircraft on stand triggered {vehicles.filter(v=>v.status==='Moving to aircraft').length} dispatches. Hydrogen demand is {demand.toFixed(1)} kg-eq and tank level is {tankLevel.toFixed(1)} kg.</div></aside>
     </div>
     <section className='bg-slate-900 border border-slate-700 rounded-xl p-3 grid lg:grid-cols-4 gap-3'>
-      <div className='lg:col-span-2'><div className='text-xs text-slate-400 mb-1'>Timeline minute {minute}</div><input type='range' min={0} max={controls.duration} value={minute} onChange={e=>setMinute(Number(e.target.value))} className='w-full' /><ResponsiveContainer width='100%' height={180}><AreaChart data={trend}><CartesianGrid strokeDasharray='3 3' stroke='#334155'/><XAxis dataKey='t' stroke='#94a3b8'/><YAxis stroke='#94a3b8'/><Tooltip /><Area type='monotone' dataKey='demand' stroke='#22d3ee' fill='#0891b288' /><Area type='monotone' dataKey='pressure' stroke='#f59e0b' fill='#f59e0b33' /></AreaChart></ResponsiveContainer></div>
-      <div className='space-y-2 text-sm'>{[['Configured flights',Math.floor((controls.flightsPerHour*controls.duration)/60)],['Flights completed',aircraft.filter(a=>a.status==='Departed').length],['Aircraft on stand',aircraft.filter(a=>a.status==='On stand'||a.status==='Turnaround').length],['Active support vehicles',vehicles.length],['Total hydrogen demand',`${demand.toFixed(1)} kg`],['Peak hourly demand',`${(demand*1.32).toFixed(1)} kg`],['Remaining tank',`${remaining.toFixed(1)}%`],['Tank pressure',`${pressure.toFixed(1)} bar`],['Highest hydrogen',highestHydrogen.toFixed(1)],['Highest thermal',highestThermal.toFixed(1)],['Warnings/Critical',alerts.length],['Risk level',`${risk}/100`]].map(([k,v])=><div key={String(k)} className='rounded bg-slate-800 p-2'><span className='text-slate-400'>{k}</span><div className='font-semibold'>{v}</div></div>)}</div>
-      <div className='space-y-2 text-xs bg-slate-800 rounded p-3'><h3 className='font-semibold'>Scenario comparison + report</h3><div>Saved scenarios: {Object.keys(saved).join(', ') || 'none'}</div><button className='rounded bg-sky-700 px-2 py-1' onClick={()=>{const blob=new Blob([JSON.stringify({saved,alerts,controls,assets,sensors,disclaimer},null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='hyready-report.json'; a.click();}}>Export JSON report</button><button className='rounded bg-sky-700 px-2 py-1 ml-2' onClick={()=>window.print()}>Printable page</button><div className='text-slate-300 pt-2'>CSV export can be generated from the JSON report in spreadsheet tools.</div></div>
+      <div className='lg:col-span-2'><div className='text-xs text-slate-400 mb-1'>Timeline minute {minute}</div><input type='range' min={0} max={controls.duration} value={minute} onChange={e=>setMinute(Number(e.target.value))} className='w-full' /><label className='text-xs'>Speed {speed}x<input type='range' min={1} max={6} value={speed} onChange={e=>setSpeed(Number(e.target.value))} className='w-full'/></label><ResponsiveContainer width='100%' height={180}><AreaChart data={Array.from({length:12}).map((_,i)=>({t:i*15,demand:Math.round(demand*(0.5+i/15)),tank:Math.round(tankLevel-(i*18))}))}><CartesianGrid strokeDasharray='3 3' stroke='#334155'/><XAxis dataKey='t' stroke='#94a3b8'/><YAxis stroke='#94a3b8'/><Tooltip /><Area type='monotone' dataKey='demand' stroke='#22d3ee' fill='#0891b288' /><Area type='monotone' dataKey='tank' stroke='#f59e0b' fill='#f59e0b33' /></AreaChart></ResponsiveContainer></div>
+      <div className='space-y-2 text-sm'>{[['Flights configured',Math.floor((controls.flightsPerHour*controls.duration)/60)],['Flights completed',aircraft.filter(a=>a.status==='Departed').length],['Aircraft on stand',aircraft.filter(a=>a.status==='On stand'||a.status==='Turnaround').length],['Active support vehicles',vehicles.length],['Vehicles refuelling',vehicles.filter(v=>v.status==='Refuelling').length],['Hydrogen produced',`${produced.toFixed(1)} kg`],['Hydrogen consumed',`${consumed.toFixed(1)} kg`],['Tank level',`${tankLevel.toFixed(1)} kg`],['Tank pressure',`${pressure.toFixed(1)} bar`],['Warnings',alerts.length]].map(([k,v])=><div key={String(k)} className='rounded bg-slate-800 p-2'><span className='text-slate-400'>{k}</span><div className='font-semibold'>{v}</div></div>)}</div>
+      <div className='space-y-2 text-xs bg-slate-800 rounded p-3'><h3 className='font-semibold'>Report output</h3><button className='rounded bg-sky-700 px-2 py-1' onClick={()=>{const blob=new Blob([JSON.stringify({scenario:'Custom',controls,assets,sensors,alerts,kpis:{produced,consumed,tankLevel,pressure},disclaimer},null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='hyready-report.json'; a.click();}}>Export JSON</button><button className='rounded bg-sky-700 px-2 py-1 ml-2' onClick={()=>window.print()}>Printable page</button><div className='text-slate-300 pt-2'>CSV export available from JSON conversion.</div></div>
     </section>
   </div>;
 }
