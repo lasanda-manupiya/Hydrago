@@ -1,4 +1,8 @@
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { dailyDemand, monthlyDemand } from '../data/demandForecast';
+import { HydrogenDemandPanel } from '../components/HydrogenDemandPanel';
+import { DemandCharts } from '../components/DemandCharts';
 
-export function ForecastPage() {return <div className="grid gap-4 lg:grid-cols-2"><div className="rounded-xl border border-slate-800 bg-slate-900 p-4"><h3 className="mb-3 font-semibold">Daily hydrogen demand (kg)</h3><div className="h-72"><ResponsiveContainer><LineChart data={dailyDemand}><XAxis dataKey="day" stroke="#94a3b8"/><YAxis stroke="#94a3b8"/><Tooltip/><Legend/><Line type="monotone" dataKey="training" stroke="#22d3ee"/><Line type="monotone" dataKey="mixed" stroke="#818cf8"/><Line type="monotone" dataKey="full" stroke="#f59e0b"/></LineChart></ResponsiveContainer></div></div><div className="rounded-xl border border-slate-800 bg-slate-900 p-4"><h3 className="mb-3 font-semibold">Monthly demand scenario comparison</h3><div className="h-72"><ResponsiveContainer><BarChart data={monthlyDemand}><XAxis dataKey="month" stroke="#94a3b8"/><YAxis stroke="#94a3b8"/><Tooltip/><Legend/><Bar dataKey="training" fill="#22d3ee"/><Bar dataKey="mixed" fill="#818cf8"/><Bar dataKey="full" fill="#f59e0b"/></BarChart></ResponsiveContainer></div></div></div>; }
+export function ForecastPage() {
+  const state = (() => { try { return JSON.parse(localStorage.getItem('hyready_latest') || 'null'); } catch { return null; } })();
+  if (!state) return <div className='rounded-xl border border-slate-800 bg-slate-900 p-4'>Run a simulation to generate demand forecast data.</div>;
+  return <div className='space-y-4'><HydrogenDemandPanel demand={state.demand} flightsScheduled={state.flightsConfigured} flightsCompleted={state.flightsCompleted} trips={state.activeSupportVehicles} /><DemandCharts demand={state.demand} /></div>;
+}
