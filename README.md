@@ -1,42 +1,49 @@
-# HyReady-GA Digital Twin Demonstrator (MVP)
+# HyReady-GA Hydrogen Readiness Digital Twin MVP
 
-A stakeholder-facing, simulation-only MVP for demonstrating how a hydrogen readiness digital twin can support General Aviation airfield planning.
+A React + TypeScript + Vite demonstrator for a **simulation-only** hydrogen-readiness digital twin for General Aviation airfields.
 
-## What this MVP demonstrates
-- Dashboard KPIs for readiness, demand, sensors, risk, and safety status.
-- Digital twin scenario simulator with configurable tank position/size, wind, and traffic.
-- Simulated airfield map with runway, taxiway, hangars, hydrogen tank, safety exclusion zone, and heatmap.
-- Demand forecasting views across daily and monthly horizons with three adoption scenarios.
-- Risk and safety assessment with risk matrix and dispersion placeholder visualisation.
-- Project evidence/report cards for stakeholder review.
+## What is simulated
+This MVP simulates:
+- Airfield assets (runway, taxiway, hangars, hydrogen storage, refuelling area, vehicle movement).
+- Virtual sensor placement (Hydrogen, Thermal, Proximity, Pressure).
+- Sensor readings influenced by tank size/location, leak severity, wind direction/speed, traffic intensity, and random noise.
+- Hydrogen/thermal heatmap intensity, safety exclusion zones, alerts, and risk/readiness KPIs.
+- A staged digital workflow panel: Sensor Layer → Data Acquisition → Data Validation → Data Processing → Digital Twin Model → Dashboard Output.
 
-## Simulation disclaimer
-This MVP uses mock frontend datasets only and does **not** represent certified safety analysis or operational control output.
+## MVP demonstration scope
+This MVP demonstrates the feasibility workflow requested in the appendix-style concept:
+- simulated sensors,
+- data acquisition,
+- validation,
+- heatmap generation,
+- safety zone evolution,
+- scenario testing and plain-English scenario interpretation.
 
-## Install
+## Disclaimer
+> This MVP uses simulated data for demonstration and feasibility purposes only. It does not represent certified safety analysis, operational control, or regulatory approval.
+
+## Run in Codespaces
 ```bash
 npm install
-```
-
-## Run locally
-```bash
 npm run dev
 ```
+Then open the forwarded Vite port.
 
-## Build
+## Build and check
 ```bash
 npm run build
 ```
 
-## Mock data sources
-- `src/data/airfieldMetrics.ts`
-- `src/data/demandForecast.ts`
-- `src/data/sensorHeatmap.ts`
-- `src/data/riskScenarios.ts`
+## Key files
+- `src/pages/SimulatorPage.tsx` – interactive digital twin canvas, controls, alerts, KPI cards, data pipeline, sensor inventory.
+- `src/lib/simulationEngine.ts` – mock simulation engine.
+- `src/types/sensors.ts` – sensor/scenario types.
+- `src/data/simulationDefaults.ts` – starter sensors and scenario configuration.
+- `src/pages/ReportsPage.tsx` – mock report outputs.
 
 ## Future development steps
-1. Add backend services (scenario engine, model orchestration, evidence repository APIs).
-2. Replace mock data with validated model outputs and site telemetry integrations.
-3. Add geospatial layering and temporal playback.
-4. Add user roles, audit trails, and report export workflows.
-5. Integrate certified safety workflows and assurance cases.
+1. Replace random/noise assumptions with calibrated dispersion and thermal sub-models.
+2. Add backend persistence, authentication, and scenario versioning.
+3. Add time-series history with replay and exportable report generation.
+4. Support geospatial coordinates and integration with operational telemetry.
+5. Add assurance/certification evidence workflows.
