@@ -1,93 +1,83 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { defaultControls, initialSensors } from '../data/simulationDefaults';
+import { saveScenario, scenarioMarkdownReport } from '../lib/scenarios';
 import { runSimulation } from '../lib/simulationEngine';
-import type { ScenarioControls, Sensor, SensorType } from '../types/sensors';
+import type { SavedScenario, ScenarioControls, Sensor, SensorType } from '../types/sensors';
 
-const sensorColors: Record<SensorType, string> = {
-  Hydrogen: '#22d3ee',
-  Thermal: '#fb7185',
-  Proximity: '#fbbf24',
-  Pressure: '#a78bfa',
-};
+const sensorColors: Record<SensorType, string> = { Hydrogen: '#22d3ee', Thermal: '#fb7185', Proximity: '#fbbf24', Pressure: '#a78bfa', Weather: '#34d399' };
 
 export function SimulatorPage() {
-  const [controls, setControls] = useState<ScenarioControls>(defaultControls);
-  const [sensors, setSensors] = useState<Sensor[]>(initialSensors);
+  const [controls, setControls] = useState(defaultControls);
+  const [sensors, setSensors] = useState(initialSensors);
   const [selectedType, setSelectedType] = useState<SensorType>('Hydrogen');
-  const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [heatmapType, setHeatmapType] = useState<'Hydrogen' | 'Thermal'>('Hydrogen');
+  const [heatmapOn, setHeatmapOn] = useState(true);
+  const [opacity, setOpacity] = useState(0.45);
+  const [saved, setSaved] = useState<SavedScenario[]>([]);
 
   const vehicle = useMemo(() => ({ x: 640 - ({ Low: 0, Medium: 70, High: 130 }[controls.trafficIntensity]), y: 295 }), [controls.trafficIntensity]);
-  const simulation = useMemo(() => runSimulation(sensors, controls, vehicle), [sensors, controls, vehicle, stageIndex]);
-
-  useEffect(() => {
-    const cycle = setInterval(() => setStageIndex((s) => (s + 1) % 6), 500);
-    const refresh = setInterval(() => setStageIndex((s) => s + 1), controls.refreshIntervalMs);
-    return () => {
-      clearInterval(cycle);
-      clearInterval(refresh);
-    };
-  }, [controls.refreshIntervalMs]);
-
-  const selectedSensor = sensors.find((s) => s.id === selectedSensorId);
+  const sim = useMemo(() => runSimulation(sensors, controls, vehicle), [sensors, controls, vehicle]);
 
   const onMapClick = (evt: React.MouseEvent<SVGSVGElement>) => {
     const rect = evt.currentTarget.getBoundingClientRect();
     const x = ((evt.clientX - rect.left) / rect.width) * 800;
     const y = ((evt.clientY - rect.top) / rect.height) * 420;
-    const id = `S-${String(sensors.length + 1).padStart(3, '0')}`;
-    setSensors((prev) => [...prev, { id, type: selectedType, position: { x, y } }]);
+    setSensors((prev) => [...prev, { id: `S-${String(prev.length + 1).padStart(3, '0')}`, type: selectedType, position: { x, y } }]);
   };
 
-  return <div className="space-y-4">
-    <div className="grid gap-4 xl:grid-cols-4">
-      <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-4 xl:col-span-1 text-sm">
-        <h3 className="font-semibold">Scenario Controls</h3>
-        <label className="block">Tank size<select className="mt-1 w-full rounded bg-slate-800 p-2" value={controls.tankSize} onChange={(e) => setControls({ ...controls, tankSize: e.target.value as ScenarioControls['tankSize'] })}><option>Small</option><option>Medium</option><option>Large</option></select></label>
-        <label className="block">Leak scenario<select className="mt-1 w-full rounded bg-slate-800 p-2" value={controls.leakScenario} onChange={(e) => setControls({ ...controls, leakScenario: e.target.value as ScenarioControls['leakScenario'] })}><option>None</option><option>Minor</option><option>Moderate</option><option>Severe</option></select></label>
-        <label className="block">Wind direction ({controls.windDirection}°)<input type="range" min={0} max={359} className="w-full" value={controls.windDirection} onChange={(e) => setControls({ ...controls, windDirection: Number(e.target.value) })} /></label>
-        <label className="block">Wind speed {controls.windSpeed} m/s<input type="range" min={1} max={30} className="w-full" value={controls.windSpeed} onChange={(e) => setControls({ ...controls, windSpeed: Number(e.target.value) })} /></label>
-        <label className="block">Traffic intensity<select className="mt-1 w-full rounded bg-slate-800 p-2" value={controls.trafficIntensity} onChange={(e) => setControls({ ...controls, trafficIntensity: e.target.value as ScenarioControls['trafficIntensity'] })}><option>Low</option><option>Medium</option><option>High</option></select></label>
-        <label className="block">Refresh interval (ms)<input type="number" min={500} step={100} className="mt-1 w-full rounded bg-slate-800 p-2" value={controls.refreshIntervalMs} onChange={(e) => setControls({ ...controls, refreshIntervalMs: Number(e.target.value) || 1500 })} /></label>
-      </section>
+  const doReset = () => { setControls(defaultControls); setSensors(initialSensors); };
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900 p-4 xl:col-span-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm">Add sensor type<select className="rounded bg-slate-800 p-2" value={selectedType} onChange={(e) => setSelectedType(e.target.value as SensorType)}><option>Hydrogen</option><option>Thermal</option><option>Proximity</option><option>Pressure</option></select></div>
-          <p className="text-xs text-slate-400">Click map to add sensor. Click existing sensor to move. Delete selected below.</p>
+  return <div className='space-y-4'>
+    <div className='grid gap-4 xl:grid-cols-4'>
+      <section className='rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-2 text-sm'>
+        <h3 className='font-semibold'>Advanced Scenario Controls</h3>
+        <label>Tank x<input title='Tank location X' type='range' min={80} max={720} value={controls.tankLocation.x} className='w-full' onChange={(e) => setControls({ ...controls, tankLocation: { ...controls.tankLocation, x: Number(e.target.value) } })} /></label>
+        <label>Tank y<input type='range' min={230} max={370} value={controls.tankLocation.y} className='w-full' onChange={(e) => setControls({ ...controls, tankLocation: { ...controls.tankLocation, y: Number(e.target.value) } })} /></label>
+        <select className='w-full rounded bg-slate-800 p-2' value={controls.tankSize} onChange={(e) => setControls({ ...controls, tankSize: e.target.value as ScenarioControls['tankSize'] })}><option>Small</option><option>Medium</option><option>Large</option></select>
+        <select className='w-full rounded bg-slate-800 p-2' value={controls.leakScenario} onChange={(e) => setControls({ ...controls, leakScenario: e.target.value as ScenarioControls['leakScenario'] })}><option>None</option><option>Minor</option><option>Moderate</option><option>Severe</option></select>
+        <label>Wind {controls.windSpeed} m/s<input type='range' min={0} max={30} value={controls.windSpeed} className='w-full' onChange={(e) => setControls({ ...controls, windSpeed: Number(e.target.value) })} /></label>
+        <label>Direction {controls.windDirection}°<input type='range' min={0} max={359} value={controls.windDirection} className='w-full' onChange={(e) => setControls({ ...controls, windDirection: Number(e.target.value) })} /></label>
+        <select className='w-full rounded bg-slate-800 p-2' value={controls.trafficIntensity} onChange={(e) => setControls({ ...controls, trafficIntensity: e.target.value as ScenarioControls['trafficIntensity'] })}><option>Low</option><option>Medium</option><option>High</option></select>
+        <select className='w-full rounded bg-slate-800 p-2' value={controls.timeOfDay} onChange={(e) => setControls({ ...controls, timeOfDay: e.target.value as ScenarioControls['timeOfDay'] })}><option>Day</option><option>Night</option></select>
+        <label>Timeline replay ({controls.timelineIndex})<input type='range' min={0} max={100} value={controls.timelineIndex} className='w-full' onChange={(e) => setControls({ ...controls, timelineIndex: Number(e.target.value) })} /></label>
+        <label>H2 threshold<input type='number' className='w-full rounded bg-slate-800 p-1' value={controls.customHydrogenThreshold} onChange={(e) => setControls({ ...controls, customHydrogenThreshold: Number(e.target.value) })}/></label>
+        <label>Thermal threshold<input type='number' className='w-full rounded bg-slate-800 p-1' value={controls.customThermalThreshold} onChange={(e) => setControls({ ...controls, customThermalThreshold: Number(e.target.value) })}/></label>
+        <button className='w-full rounded bg-slate-700 p-2' onClick={doReset}>Reset scenario</button>
+      </section>
+      <section className='rounded-xl border border-slate-800 bg-slate-900 p-4 xl:col-span-3'>
+        <div className='flex gap-2 text-sm mb-2'>
+          <select title='Click map to add a sensor' className='rounded bg-slate-800 p-2' value={selectedType} onChange={(e) => setSelectedType(e.target.value as SensorType)}><option>Hydrogen</option><option>Thermal</option><option>Proximity</option><option>Pressure</option><option>Weather</option></select>
+          <label><input type='checkbox' checked={heatmapOn} onChange={(e) => setHeatmapOn(e.target.checked)} /> Heatmap</label>
+          <select className='rounded bg-slate-800 p-2' value={heatmapType} onChange={(e) => setHeatmapType(e.target.value as 'Hydrogen' | 'Thermal')}><option>Hydrogen</option><option>Thermal</option></select>
+          <label>Opacity<input type='range' min={0.1} max={0.9} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))}/></label>
         </div>
-        <svg viewBox="0 0 800 420" className="w-full rounded bg-slate-950" onClick={onMapClick}>
-          {simulation.heatmap.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r={12} fill={`rgba(239,68,68,${c.intensity / 180})`} />)}
-          <rect x="60" y="170" width="680" height="60" fill="#334155" />
-          <rect x="120" y="245" width="520" height="30" fill="#1e293b" />
-          <rect x="120" y="70" width="130" height="75" fill="#475569" />
-          <rect x="550" y="70" width="130" height="75" fill="#475569" />
-          <rect x="355" y="300" width="110" height="45" fill="#0e7490" />
-          <circle cx={controls.tankLocation.x} cy={controls.tankLocation.y} r={simulation.safetyZoneRadius} fill="rgba(245,158,11,0.15)" />
-          <circle cx={controls.tankLocation.x} cy={controls.tankLocation.y} r={18} fill="#f59e0b" onClick={(e) => { e.stopPropagation(); setControls({ ...controls, tankLocation: { x: 130 + Math.random() * 560, y: 250 + Math.random() * 90 } }); }} />
-          <rect x={vehicle.x - 16} y={vehicle.y - 10} width={32} height={20} fill="#22c55e" />
-          {sensors.map((s) => <g key={s.id} onClick={(e) => { e.stopPropagation(); setSelectedSensorId(s.id); setSensors((prev) => prev.map((p) => p.id === s.id ? { ...p, position: { x: p.position.x + 12, y: p.position.y - 8 } } : p)); }}>
-            <circle cx={s.position.x} cy={s.position.y} r={8} fill={sensorColors[s.type]} stroke={selectedSensorId === s.id ? '#fff' : 'none'} strokeWidth={2} />
-            <text x={s.position.x + 10} y={s.position.y - 10} className="fill-slate-200 text-[10px]">{s.id}</text>
-          </g>)}
+        <svg viewBox='0 0 800 420' className='w-full rounded bg-slate-950' onClick={onMapClick}>
+          {heatmapOn && sim.heatmap.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r={11} fill={heatmapType === 'Hydrogen' ? `rgba(239,68,68,${(c.intensity / 100) * opacity})` : `rgba(56,189,248,${(c.intensity / 100) * opacity})`} />)}
+          <rect x='120' y='70' width='130' height='75' fill='#475569' /><rect x='550' y='70' width='130' height='75' fill='#475569' />
+          <rect x='60' y='170' width='680' height='60' fill='#334155' /><rect x='120' y='245' width='520' height='30' fill='#1e293b' />
+          <circle cx={controls.tankLocation.x} cy={controls.tankLocation.y} r={sim.safetyZoneRadius} fill='rgba(245,158,11,0.11)'/>
+          <circle cx={controls.tankLocation.x} cy={controls.tankLocation.y} r='14' fill='#f59e0b' />
+          {sensors.map((s) => <g key={s.id}><circle cx={s.position.x} cy={s.position.y} r='8' fill={sensorColors[s.type]} /><text x={s.position.x + 9} y={s.position.y - 10} className='fill-slate-200 text-[10px]'>{s.id}</text></g>)}
         </svg>
       </section>
     </div>
-
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4"><h4 className="font-semibold">Dashboard Metrics</h4><ul className="mt-2 space-y-1 text-sm text-slate-300"><li>Overall readiness: <strong>{simulation.readinessScore}%</strong></li><li>Highest hydrogen: <strong>{simulation.highestHydrogen} ppm</strong></li><li>Highest thermal: <strong>{simulation.highestThermal} °C</strong></li><li>Active sensors: <strong>{sensors.length}</strong></li><li>Warnings: <strong>{simulation.readings.filter((r) => r.status !== 'Normal').length}</strong></li><li>Risk level: <strong>{simulation.riskLevel}</strong></li></ul></div>
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 lg:col-span-2"><h4 className="font-semibold">Alerts & Explanation</h4><ul className="mt-2 list-disc pl-5 text-sm text-rose-300">{simulation.alerts.length ? simulation.alerts.map((a) => <li key={a}>{a}</li>) : <li>No active alerts.</li>}</ul><p className="mt-3 text-sm text-slate-300">{simulation.summary}</p></div>
+    <div className='grid gap-4 md:grid-cols-3'>
+      <div className='rounded-xl border border-slate-800 bg-slate-900 p-4'>Risk {sim.riskScore} ({sim.riskLevel})<br/>Demand forecast {sim.demandForecast}</div>
+      <div className='rounded-xl border border-slate-800 bg-slate-900 p-4 md:col-span-2'><h4 className='font-semibold'>Alert panel</h4><ul className='text-rose-300 list-disc pl-5'>{sim.alerts.length ? sim.alerts.map((a) => <li key={a}>{a}</li>) : <li>No active alerts</li>}</ul><p className='text-slate-300 mt-2'>{sim.summary}</p></div>
     </div>
-
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-      <h4 className="font-semibold">Sensor Inventory</h4>
-      <div className="mt-2 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="text-slate-400"><th>ID</th><th>Type</th><th>X/Y</th><th>Current value</th><th>Status</th></tr></thead><tbody>{simulation.readings.map((r) => { const s = sensors.find((sensor) => sensor.id === r.id)!; return <tr key={r.id} className="border-t border-slate-800"><td>{r.id}</td><td>{r.type}</td><td>{Math.round(s.position.x)}/{Math.round(s.position.y)}</td><td>{r.value} {r.unit}</td><td>{r.status}</td></tr>; })}</tbody></table></div>
-      {selectedSensor && <button className="mt-3 rounded bg-rose-700 px-3 py-2 text-sm" onClick={() => { setSensors((prev) => prev.filter((s) => s.id !== selectedSensor.id)); setSelectedSensorId(null); }}>Delete selected sensor ({selectedSensor.id})</button>}
+    <div className='rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm'>
+      <h4 className='font-semibold'>Data flow diagram</h4>
+      <div className='grid grid-cols-4 md:grid-cols-6 gap-2 mt-2 text-xs'>{['Sensor Input','Validation','Model','Output','Alerts','Reports'].map((stage, i) => <div key={stage} className={`rounded p-2 text-center ${i <= (controls.timelineIndex % 6) ? 'bg-cyan-700' : 'bg-slate-800'}`}>{stage}</div>)}</div>
     </div>
-
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-      <h4 className="font-semibold">Data Pipeline View</h4>
-      <div className="mt-3 grid gap-2 md:grid-cols-6 text-xs">{['Sensor Layer', 'Data Acquisition', 'Data Validation', 'Data Processing', 'Digital Twin Model', 'Dashboard Output'].map((s, idx) => <div key={s} className={`rounded p-2 text-center ${idx === stageIndex % 6 ? 'bg-cyan-700 text-white' : 'bg-slate-800 text-slate-300'}`}>{s}</div>)}</div>
+    <div className='rounded-xl border border-slate-800 bg-slate-900 p-4 overflow-x-auto'>
+      <table className='w-full text-sm'><thead><tr><th>ID</th><th>Type</th><th>Position</th><th>Reading</th><th>Status</th></tr></thead><tbody>{sim.readings.map((r) => { const s = sensors.find((x) => x.id === r.id) as Sensor; return <tr key={r.id} className='border-t border-slate-800'><td>{r.id}</td><td>{r.type}</td><td>{Math.round(s.position.x)},{Math.round(s.position.y)}</td><td>{r.value} {r.unit}</td><td>{r.status}</td></tr>; })}</tbody></table>
+    </div>
+    <div className='rounded-xl border border-slate-800 bg-slate-900 p-4'>
+      <h4 className='font-semibold'>Scenario comparison & reporting</h4>
+      <div className='flex gap-2 mt-2'>
+        <button className='rounded bg-cyan-700 px-3 py-2 text-sm' onClick={() => setSaved((prev) => [...prev, saveScenario(`Scenario ${prev.length + 1}`, controls, sensors, sim)])}>Save scenario</button>
+      </div>
+      <div className='grid md:grid-cols-2 gap-2 mt-2'>{saved.map((s) => <article key={s.name} className='rounded bg-slate-800 p-2 text-sm'><b>{s.name}</b><div>Risk {s.output.riskLevel} ({s.output.riskScore}) | Zone {s.output.safetyZoneRadius}m | Demand {s.output.demandForecast}</div><pre className='mt-2 whitespace-pre-wrap text-xs text-slate-300'>{scenarioMarkdownReport(s)}</pre></article>)}</div>
     </div>
   </div>;
 }

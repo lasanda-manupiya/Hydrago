@@ -6,17 +6,15 @@ import { ReportsPage } from './pages/ReportsPage';
 import { RiskPage } from './pages/RiskPage';
 import { SimulatorPage } from './pages/SimulatorPage';
 
-const defaultPage = 'Dashboard Overview';
-
 export default function App() {
-  const [page, setPage] = useState<string>(defaultPage);
+  const [page, setPage] = useState<string>('Dashboard');
   return (
-    <Layout active={page} onChange={setPage}>
-      {page === 'Dashboard Overview' && <DashboardPage />}
-      {page === 'Digital Twin Scenario Simulator' && <SimulatorPage />}
-      {page === 'Hydrogen Demand Forecast' && <ForecastPage />}
-      {page === 'Risk and Safety Assessment' && <RiskPage />}
-      {page === 'Project Evidence / Reports' && <ReportsPage />}
+    <Layout active={page as any} onChange={setPage as any}>
+      {page === 'Dashboard' && <DashboardPage />}
+      {page === 'Simulation' && <SimulatorPage />}
+      {page === 'Demand Forecasting' && <ForecastPage />}
+      {page === 'Risk Assessment' && <RiskPage />}
+      {page === 'Reports' && <ReportsPage />}
     </Layout>
   );
 }
