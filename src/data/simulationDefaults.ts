@@ -7,7 +7,10 @@ export const defaultControls: ScenarioControls = {
   windSpeed: 12,
   trafficIntensity: 'Medium',
   leakScenario: 'Minor',
-  refreshIntervalMs: 1500,
+  timeOfDay: 'Day',
+  timelineIndex: 30,
+  customHydrogenThreshold: 550,
+  customThermalThreshold: 55,
 };
 
 export const initialSensors: Sensor[] = [
@@ -15,4 +18,5 @@ export const initialSensors: Sensor[] = [
   { id: 'S-002', type: 'Thermal', position: { x: 520, y: 90 } },
   { id: 'S-003', type: 'Pressure', position: { x: 380, y: 312 } },
   { id: 'S-004', type: 'Proximity', position: { x: 680, y: 290 } },
+  { id: 'S-005', type: 'Weather', position: { x: 95, y: 85 } },
 ];

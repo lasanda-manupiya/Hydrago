@@ -1,19 +1,13 @@
-export type SensorType = 'Hydrogen' | 'Thermal' | 'Proximity' | 'Pressure';
+export type SensorType = 'Hydrogen' | 'Thermal' | 'Proximity' | 'Pressure' | 'Weather';
 export type SensorStatus = 'Normal' | 'Warning' | 'Critical';
 export type LeakScenario = 'None' | 'Minor' | 'Moderate' | 'Severe';
 export type TrafficIntensity = 'Low' | 'Medium' | 'High';
 export type TankSize = 'Small' | 'Medium' | 'Large';
+export type TimeOfDay = 'Day' | 'Night';
 
-export interface Point {
-  x: number;
-  y: number;
-}
+export interface Point { x: number; y: number }
 
-export interface Sensor {
-  id: string;
-  type: SensorType;
-  position: Point;
-}
+export interface Sensor { id: string; type: SensorType; position: Point }
 
 export interface ScenarioControls {
   tankLocation: Point;
@@ -22,14 +16,17 @@ export interface ScenarioControls {
   windSpeed: number;
   trafficIntensity: TrafficIntensity;
   leakScenario: LeakScenario;
-  refreshIntervalMs: number;
+  timeOfDay: TimeOfDay;
+  timelineIndex: number;
+  customHydrogenThreshold: number;
+  customThermalThreshold: number;
 }
 
 export interface SimulatedSensorReading {
   id: string;
   type: SensorType;
   value: number;
-  unit: 'ppm' | '°C' | 'm' | 'bar';
+  unit: 'ppm' | '°C' | 'm' | 'bar' | 'm/s';
   status: SensorStatus;
 }
 
@@ -44,4 +41,13 @@ export interface SimulationOutput {
   highestHydrogen: number;
   highestThermal: number;
   readinessScore: number;
+  overlapWithHangar: boolean;
+  demandForecast: number;
+}
+
+export interface SavedScenario {
+  name: string;
+  controls: ScenarioControls;
+  sensors: Sensor[];
+  output: Pick<SimulationOutput, 'riskScore' | 'riskLevel' | 'safetyZoneRadius' | 'demandForecast'>;
 }
